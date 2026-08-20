@@ -1,0 +1,261 @@
+# Required modules:
+# Install-Module Az -Scope CurrentUser
+# Install-Module ImportExcel -Scope CurrentUser -Force
+
+$defaultOnlyReport = @()
+$customAndDefaultReport = @()
+$errorReport = @()
+
+function ConvertTo-Text {
+    param (
+        $MultipleValues,
+        $SingleValue
+    )
+
+    if ($null -ne $MultipleValues -and $MultipleValues.Count -gt 0) {
+        return ($MultipleValues | ForEach-Object { "$_" }) -join "; "
+    }
+
+    if ($null -ne $SingleValue) {
+        return "$SingleValue"
+    }
+
+    return ""
+}
+
+function New-RuleReportRow {
+    param (
+        $Subscription,
+        $NSG,
+        $Rule,
+        [string]$RuleType,
+        [string]$ConnectedSubnets,
+        [string]$ConnectedNICs
+    )
+
+    $source = ConvertTo-Text `
+        -MultipleValues $Rule.SourceAddressPrefixes `
+        -SingleValue $Rule.SourceAddressPrefix
+
+    $sourcePorts = ConvertTo-Text `
+        -MultipleValues $Rule.SourcePortRanges `
+        -SingleValue $Rule.SourcePortRange
+
+    $destination = ConvertTo-Text `
+        -MultipleValues $Rule.DestinationAddressPrefixes `
+        -SingleValue $Rule.DestinationAddressPrefix
+
+    $destinationPorts = ConvertTo-Text `
+        -MultipleValues $Rule.DestinationPortRanges `
+        -SingleValue $Rule.DestinationPortRange
+
+    [PSCustomObject]@{
+        SubscriptionName = $Subscription.Name
+        ResourceGroup    = $NSG.ResourceGroupName
+        NSGName          = $NSG.Name
+        ConnectedSubnets = $ConnectedSubnets
+        ConnectedNICs    = $ConnectedNICs
+        RuleType         = $RuleType
+        RuleName         = $Rule.Name
+        Priority         = $Rule.Priority
+        Direction        = $Rule.Direction
+        Access           = $Rule.Access
+        Protocol         = $Rule.Protocol
+        Source           = $source
+        SourcePorts      = $sourcePorts
+        Destination      = $destination
+        DestinationPorts = $destinationPorts
+    }
+}
+
+try {
+    $subscriptions = Get-AzSubscription -ErrorAction Stop |
+        Where-Object { $_.State -eq "Enabled" }
+}
+catch {
+    Write-Error "Unable to retrieve subscriptions: $($_.Exception.Message)"
+    return
+}
+
+foreach ($subscription in $subscriptions) {
+
+    Write-Host "Checking subscription: $($subscription.Name)" `
+        -ForegroundColor Cyan
+
+    try {
+        Set-AzContext `
+            -SubscriptionId $subscription.Id `
+            -ErrorAction Stop | Out-Null
+
+        $nsgs = Get-AzNetworkSecurityGroup -ErrorAction Stop
+    }
+    catch {
+        $message = $_.Exception.Message
+
+        Write-Warning "Subscription failed: $($subscription.Name) - $message"
+
+        $errorReport += [PSCustomObject]@{
+            SubscriptionName = $subscription.Name
+            ResourceGroup    = ""
+            NSGName          = ""
+            Error            = $message
+        }
+
+        continue
+    }
+
+    foreach ($nsg in $nsgs) {
+
+        try {
+            $connectedSubnets = @(
+                $nsg.Subnets | ForEach-Object {
+                    $parts = $_.Id -split "/"
+
+                    if ($parts.Count -gt 10) {
+                        "$($parts[8])/$($parts[10])"
+                    }
+                    else {
+                        $_.Id
+                    }
+                }
+            )
+
+            $connectedNICs = @(
+                $nsg.NetworkInterfaces | ForEach-Object {
+                    ($_.Id -split "/")[-1]
+                }
+            )
+
+            $subnetList = $connectedSubnets -join "; "
+            $nicList    = $connectedNICs -join "; "
+
+            $customOutboundRules = @(
+                $nsg.SecurityRules |
+                Where-Object { $_.Direction -eq "Outbound" }
+            )
+
+            $defaultOutboundRules = @(
+                $nsg.DefaultSecurityRules |
+                Where-Object { $_.Direction -eq "Outbound" }
+            )
+
+            # TAB 1:
+            # NSGs with no custom outbound rules
+            if ($customOutboundRules.Count -eq 0) {
+
+                foreach ($rule in $defaultOutboundRules) {
+                    $defaultOnlyReport += New-RuleReportRow `
+                        -Subscription $subscription `
+                        -NSG $nsg `
+                        -Rule $rule `
+                        -RuleType "Default" `
+                        -ConnectedSubnets $subnetList `
+                        -ConnectedNICs $nicList
+                }
+            }
+
+            # TAB 2:
+            # NSGs with custom outbound rules
+            else {
+                foreach ($rule in $customOutboundRules) {
+                    $customAndDefaultReport += New-RuleReportRow `
+                        -Subscription $subscription `
+                        -NSG $nsg `
+                        -Rule $rule `
+                        -RuleType "Custom" `
+                        -ConnectedSubnets $subnetList `
+                        -ConnectedNICs $nicList
+                }
+
+                # Also add default outbound rules for the same NSG
+                foreach ($rule in $defaultOutboundRules) {
+                    $customAndDefaultReport += New-RuleReportRow `
+                        -Subscription $subscription `
+                        -NSG $nsg `
+                        -Rule $rule `
+                        -RuleType "Default" `
+                        -ConnectedSubnets $subnetList `
+                        -ConnectedNICs $nicList
+                }
+            }
+        }
+        catch {
+            $message = $_.Exception.Message
+
+            Write-Warning "NSG failed: $($nsg.Name) - $message"
+
+            $errorReport += [PSCustomObject]@{
+                SubscriptionName = $subscription.Name
+                ResourceGroup    = $nsg.ResourceGroupName
+                NSGName          = $nsg.Name
+                Error            = $message
+            }
+        }
+    }
+}
+
+$excelPath = Join-Path $PWD "NSG-Outbound-Analysis.xlsx"
+
+if (Test-Path $excelPath) {
+    Remove-Item $excelPath -Force
+}
+
+# Tab 1
+$defaultOnlyReport |
+    Sort-Object SubscriptionName, ResourceGroup, NSGName, Priority |
+    Export-Excel `
+        -Path $excelPath `
+        -WorksheetName "Default Outbound Only" `
+        -TableName "DefaultOutboundNSGs" `
+        -TableStyle Medium4 `
+        -AutoSize `
+        -AutoFilter `
+        -FreezeTopRow `
+        -BoldTopRow
+
+# Tab 2
+$customAndDefaultReport |
+    Sort-Object SubscriptionName, ResourceGroup, NSGName, Priority |
+    Export-Excel `
+        -Path $excelPath `
+        -WorksheetName "Custom and Default Rules" `
+        -TableName "CustomDefaultNSGs" `
+        -TableStyle Medium4 `
+        -AutoSize `
+        -AutoFilter `
+        -FreezeTopRow `
+        -BoldTopRow `
+        -Append
+
+# Add Errors tab only when errors exist
+if ($errorReport.Count -gt 0) {
+    $errorReport |
+        Export-Excel `
+            -Path $excelPath `
+            -WorksheetName "Errors" `
+            -TableName "NSGErrors" `
+            -TableStyle Medium4 `
+            -AutoSize `
+            -AutoFilter `
+            -FreezeTopRow `
+            -BoldTopRow `
+            -Append
+}
+
+# Remove row striping; retain heading colour
+$excelPackage = Open-ExcelPackage -Path $excelPath
+
+foreach ($worksheet in $excelPackage.Workbook.Worksheets) {
+    foreach ($table in $worksheet.Tables) {
+        $table.ShowRowStripes = $false
+        $table.ShowColumnStripes = $false
+    }
+}
+
+Close-ExcelPackage $excelPackage
+
+Write-Host ""
+Write-Host "Excel report created: $excelPath" -ForegroundColor Green
+Write-Host "Default-only NSG rule rows: $($defaultOnlyReport.Count)"
+Write-Host "Custom and default rule rows: $($customAndDefaultReport.Count)"
+Write-Host "Errors: $($errorReport.Count)"
