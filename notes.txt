@@ -1,0 +1,27 @@
+Initial analysis has been completed for the NSG outbound security finding.
+
+The dashboard is reporting multiple NSGs because Azure automatically creates default outbound rules that allow VirtualNetwork and Internet traffic across all ports and protocols. These Microsoft-managed default rules exist on every NSG and cannot be deleted or modified directly.
+
+I ran an automated inventory across the subscriptions available to me and classified the NSGs into:
+
+1. NSGs with only Azure default outbound rules.
+2. NSGs with additional custom outbound rules.
+
+The report also includes the subscription, resource group, NSG name, subnet/NIC association, rule details, and subscription-wise totals.
+
+Before remediation, we need Security to confirm the expected scope:
+
+* Should Microsoft-managed default outbound rules be excluded/exempted from this finding?
+* Or is the requirement to implement outbound restriction on every NSG by creating approved allow rules followed by a higher-priority Deny All Outbound rule?
+* For NSGs with custom permissive rules, can application/network owners confirm the required destinations, ports, and protocols before those rules are restricted or removed?
+
+No NSG rules have been changed yet because applying a blanket outbound deny or removing existing custom rules without dependency validation could affect active workloads.
+
+Proposed next steps:
+
+1. Share the inventory report with Security and Network teams.
+2. Confirm whether the finding applies to Azure defaults, custom rules, or both.
+3. Review custom rules that allow all protocols and all destination ports.
+4. Validate application dependencies with the relevant owners.
+5. Test the remediation on a small group of non-production NSGs.
+6. Roll out the approved change in controlled batches.
