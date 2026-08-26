@@ -1,36 +1,24 @@
 # ============================================================
-# NSG OUTBOUND RULE ANALYSIS
+# NSG OUTBOUND RULE ANALYSIS - CUSTODIAN WORKBOOK
 # ============================================================
-#
 # Required modules:
-# Install-Module Az -Scope CurrentUser
-# Install-Module ImportExcel -Scope CurrentUser -Force
+#   Install-Module Az -Scope CurrentUser
+#   Install-Module ImportExcel -Scope CurrentUser -Force
 #
-# This script is read-only. It does not modify any NSG.
+# Read-only: this script does not modify or delete any NSG.
 # ============================================================
 
-$defaultOnlyReport      = @()
-$customAndDefaultReport = @()
-$errorReport            = @()
-
-# ============================================================
-# FUNCTIONS
-# ============================================================
+$nsgInventory = @()
+$ruleReport    = @()
+$errorReport   = @()
 
 function ConvertTo-Text {
-    param (
-        $MultipleValues,
-        $SingleValue
-    )
+    param($MultipleValues, $SingleValue)
 
     if ($null -ne $MultipleValues) {
         $values = @($MultipleValues)
-
         if ($values.Count -gt 0) {
-            return (
-                $values |
-                ForEach-Object { "$_" }
-            ) -join "; "
+            return ($values | ForEach-Object { "$_" }) -join "; "
         }
     }
 
@@ -41,49 +29,129 @@ function ConvertTo-Text {
     return ""
 }
 
+function Get-SubscriptionMetadata {
+    param([string]$SubscriptionName)
+
+    $parts = @($SubscriptionName -split "_" | Where-Object { $_ })
+    $environment = if ($parts.Count -gt 0) { $parts[0].ToUpperInvariant() } else { "UNKNOWN" }
+    $custodian   = if ($parts.Count -gt 1) { $parts[-1] } else { $SubscriptionName }
+
+    [PSCustomObject]@{
+        Environment = $environment
+        Custodian   = $custodian
+    }
+}
+
+function Get-SafeWorksheetName {
+    param(
+        [string]$RequestedName,
+        [hashtable]$UsedNames
+    )
+
+    $name = $RequestedName -replace '[:\\/\?\*\[\]]', '_'
+    $name = $name.Trim()
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = "Custodian" }
+    if ($name.Length -gt 31) { $name = $name.Substring(0, 31) }
+
+    $baseName = $name
+    $counter = 2
+    while ($UsedNames.ContainsKey($name.ToLowerInvariant())) {
+        $suffix = "_$counter"
+        $maxBaseLength = 31 - $suffix.Length
+        $trimmedBase = if ($baseName.Length -gt $maxBaseLength) {
+            $baseName.Substring(0, $maxBaseLength)
+        } else {
+            $baseName
+        }
+        $name = "$trimmedBase$suffix"
+        $counter++
+    }
+
+    $UsedNames[$name.ToLowerInvariant()] = $true
+    return $name
+}
+
 function New-RuleReportRow {
-    param (
+    param(
         $Subscription,
+        $Metadata,
         $NSG,
         $Rule,
+        [string]$Classification,
         [string]$RuleType,
         [string]$ConnectedSubnets,
         [string]$ConnectedNICs
     )
 
-    $source = ConvertTo-Text `
-        -MultipleValues $Rule.SourceAddressPrefixes `
-        -SingleValue $Rule.SourceAddressPrefix
-
-    $sourcePorts = ConvertTo-Text `
-        -MultipleValues $Rule.SourcePortRanges `
-        -SingleValue $Rule.SourcePortRange
-
-    $destination = ConvertTo-Text `
-        -MultipleValues $Rule.DestinationAddressPrefixes `
-        -SingleValue $Rule.DestinationAddressPrefix
-
-    $destinationPorts = ConvertTo-Text `
-        -MultipleValues $Rule.DestinationPortRanges `
-        -SingleValue $Rule.DestinationPortRange
-
-    return [PSCustomObject]@{
+    [PSCustomObject]@{
         SubscriptionName = $Subscription.Name
+        Environment      = $Metadata.Environment
+        Custodian        = $Metadata.Custodian
         ResourceGroup    = $NSG.ResourceGroupName
         NSGName          = $NSG.Name
         ConnectedSubnets = $ConnectedSubnets
         ConnectedNICs    = $ConnectedNICs
+        Classification   = $Classification
         RuleType         = $RuleType
         RuleName         = $Rule.Name
         Priority         = $Rule.Priority
         Direction        = $Rule.Direction
         Access           = $Rule.Access
         Protocol         = $Rule.Protocol
-        Source           = $source
-        SourcePorts      = $sourcePorts
-        Destination      = $destination
-        DestinationPorts = $destinationPorts
+        Source           = ConvertTo-Text $Rule.SourceAddressPrefixes $Rule.SourceAddressPrefix
+        SourcePorts      = ConvertTo-Text $Rule.SourcePortRanges $Rule.SourcePortRange
+        Destination      = ConvertTo-Text $Rule.DestinationAddressPrefixes $Rule.DestinationAddressPrefix
+        DestinationPorts = ConvertTo-Text $Rule.DestinationPortRanges $Rule.DestinationPortRange
     }
+}
+
+function Write-WorksheetSection {
+    param(
+        $Worksheet,
+        [int]$StartRow,
+        [string]$Title,
+        [array]$Rows,
+        [string[]]$Columns,
+        [string]$TableName
+    )
+
+    $Worksheet.Cells[$StartRow, 1].Value = $Title
+    $Worksheet.Cells[$StartRow, 1, $StartRow, $Columns.Count].Merge = $true
+    $Worksheet.Cells[$StartRow, 1, $StartRow, $Columns.Count].Style.Font.Bold = $true
+    $Worksheet.Cells[$StartRow, 1, $StartRow, $Columns.Count].Style.Font.Color.SetColor([System.Drawing.Color]::White)
+    $Worksheet.Cells[$StartRow, 1, $StartRow, $Columns.Count].Style.Fill.PatternType = "Solid"
+    $Worksheet.Cells[$StartRow, 1, $StartRow, $Columns.Count].Style.Fill.BackgroundColor.SetColor([System.Drawing.Color]::FromArgb(112, 48, 160))
+
+    $headerRow = $StartRow + 1
+    for ($columnIndex = 0; $columnIndex -lt $Columns.Count; $columnIndex++) {
+        $Worksheet.Cells[$headerRow, $columnIndex + 1].Value = $Columns[$columnIndex]
+    }
+
+    $Worksheet.Cells[$headerRow, 1, $headerRow, $Columns.Count].Style.Font.Bold = $true
+    $Worksheet.Cells[$headerRow, 1, $headerRow, $Columns.Count].Style.Fill.PatternType = "Solid"
+    $Worksheet.Cells[$headerRow, 1, $headerRow, $Columns.Count].Style.Fill.BackgroundColor.SetColor([System.Drawing.Color]::FromArgb(217, 210, 233))
+
+    if ($Rows.Count -eq 0) {
+        $Worksheet.Cells[$headerRow + 1, 1].Value = "No records"
+        return ($headerRow + 3)
+    }
+
+    $dataRow = $headerRow + 1
+    foreach ($item in $Rows) {
+        for ($columnIndex = 0; $columnIndex -lt $Columns.Count; $columnIndex++) {
+            $propertyName = $Columns[$columnIndex]
+            $Worksheet.Cells[$dataRow, $columnIndex + 1].Value = $item.$propertyName
+        }
+        $dataRow++
+    }
+
+    $tableRange = $Worksheet.Cells[$headerRow, 1, $dataRow - 1, $Columns.Count]
+    $table = $Worksheet.Tables.Add($tableRange, $TableName)
+    $table.TableStyle = "Medium4"
+    $table.ShowRowStripes = $false
+    $table.ShowColumnStripes = $false
+
+    return ($dataRow + 1)
 }
 
 # ============================================================
@@ -100,8 +168,7 @@ try {
         throw "No enabled subscriptions were found."
     }
 
-    Write-Host "Enabled subscriptions found: $($subscriptions.Count)" `
-        -ForegroundColor Green
+    Write-Host "Enabled subscriptions found: $($subscriptions.Count)" -ForegroundColor Green
 }
 catch {
     Write-Error "Unable to retrieve subscriptions: $($_.Exception.Message)"
@@ -109,167 +176,122 @@ catch {
 }
 
 # ============================================================
-# COLLECT NSG INFORMATION
+# COLLECT AND CLASSIFY NSGS
 # ============================================================
 
 foreach ($subscription in $subscriptions) {
+    $metadata = Get-SubscriptionMetadata $subscription.Name
 
     Write-Host ""
-    Write-Host "Checking subscription: $($subscription.Name)" `
-        -ForegroundColor Cyan
+    Write-Host "Checking: $($subscription.Name)" -ForegroundColor Cyan
 
     try {
-        Set-AzContext `
-            -SubscriptionId $subscription.Id `
-            -ErrorAction Stop | Out-Null
-
-        $nsgs = @(
-            Get-AzNetworkSecurityGroup -ErrorAction Stop
-        )
-
+        Set-AzContext -SubscriptionId $subscription.Id -ErrorAction Stop | Out-Null
+        $nsgs = @(Get-AzNetworkSecurityGroup -ErrorAction Stop)
         Write-Host "NSGs found: $($nsgs.Count)"
     }
     catch {
         $message = $_.Exception.Message
-
-        Write-Warning `
-            "Subscription failed: $($subscription.Name) - $message"
+        Write-Warning "Subscription failed: $($subscription.Name) - $message"
 
         $errorReport += [PSCustomObject]@{
             SubscriptionName = $subscription.Name
+            Environment      = $metadata.Environment
+            Custodian        = $metadata.Custodian
             ResourceGroup    = ""
             NSGName          = ""
             ErrorType        = "Subscription"
             ErrorMessage     = $message
         }
-
         continue
     }
 
     foreach ($nsg in $nsgs) {
-
         try {
-            # --------------------------------------------
-            # Connected subnets
-            # --------------------------------------------
-
             $connectedSubnets = @(
-                $nsg.Subnets |
-                ForEach-Object {
-
-                    if ([string]::IsNullOrWhiteSpace($_.Id)) {
-                        return
-                    }
-
-                    $parts = $_.Id -split "/"
-
-                    if ($parts.Count -gt 10) {
-                        $vnetName   = $parts[8]
-                        $subnetName = $parts[10]
-
-                        "$vnetName/$subnetName"
-                    }
-                    else {
-                        $_.Id
+                $nsg.Subnets | ForEach-Object {
+                    if (-not [string]::IsNullOrWhiteSpace($_.Id)) {
+                        $parts = $_.Id -split "/"
+                        if ($parts.Count -gt 10) {
+                            "$($parts[8])/$($parts[10])"
+                        } else {
+                            $_.Id
+                        }
                     }
                 }
             )
 
-            $subnetList = $connectedSubnets -join "; "
-
-            # --------------------------------------------
-            # Connected NICs
-            # --------------------------------------------
-
             $connectedNICs = @(
-                $nsg.NetworkInterfaces |
-                ForEach-Object {
-
+                $nsg.NetworkInterfaces | ForEach-Object {
                     if (-not [string]::IsNullOrWhiteSpace($_.Id)) {
                         ($_.Id -split "/")[-1]
                     }
                 }
             )
 
-            $nicList = $connectedNICs -join "; "
-
-            # --------------------------------------------
-            # Custom outbound rules
-            # --------------------------------------------
+            $subnetList = $connectedSubnets -join "; "
+            $nicList    = $connectedNICs -join "; "
 
             $customOutboundRules = @(
-                $nsg.SecurityRules |
-                Where-Object {
-                    $_.Direction -eq "Outbound"
-                }
+                $nsg.SecurityRules | Where-Object { $_.Direction -eq "Outbound" }
             )
-
-            # --------------------------------------------
-            # Azure default outbound rules
-            # --------------------------------------------
 
             $defaultOutboundRules = @(
-                $nsg.DefaultSecurityRules |
-                Where-Object {
-                    $_.Direction -eq "Outbound"
-                }
+                $nsg.DefaultSecurityRules | Where-Object { $_.Direction -eq "Outbound" }
             )
 
-            # --------------------------------------------
-            # Default outbound only
-            # --------------------------------------------
-
-            if ($customOutboundRules.Count -eq 0) {
-
-                foreach ($rule in $defaultOutboundRules) {
-
-                    $defaultOnlyReport += New-RuleReportRow `
-                        -Subscription $subscription `
-                        -NSG $nsg `
-                        -Rule $rule `
-                        -RuleType "Default" `
-                        -ConnectedSubnets $subnetList `
-                        -ConnectedNICs $nicList
-                }
+            $isUnattached = ($connectedSubnets.Count -eq 0 -and $connectedNICs.Count -eq 0)
+            $classification = if ($isUnattached) {
+                "Unattached"
+            } elseif ($customOutboundRules.Count -gt 0) {
+                "Custom"
+            } else {
+                "Default"
             }
 
-            # --------------------------------------------
-            # Custom outbound rules exist
-            # Add both custom and default outbound rules
-            # --------------------------------------------
+            $nsgInventory += [PSCustomObject]@{
+                SubscriptionName   = $subscription.Name
+                Environment        = $metadata.Environment
+                Custodian          = $metadata.Custodian
+                ResourceGroup      = $nsg.ResourceGroupName
+                NSGName            = $nsg.Name
+                ConnectedSubnets   = $subnetList
+                ConnectedNICs      = $nicList
+                Classification     = $classification
+                CustomOutboundRuleCount = $customOutboundRules.Count
+                Status             = if ($isUnattached) { "Deletion Candidate - Validate First" } else { "In Use" }
+            }
 
-            else {
-                foreach ($rule in $customOutboundRules) {
-
-                    $customAndDefaultReport += New-RuleReportRow `
-                        -Subscription $subscription `
-                        -NSG $nsg `
-                        -Rule $rule `
-                        -RuleType "Custom" `
-                        -ConnectedSubnets $subnetList `
-                        -ConnectedNICs $nicList
+            # Unattached NSGs are listed once and not repeated in Default/Custom sections.
+            if (-not $isUnattached) {
+                if ($classification -eq "Default") {
+                    foreach ($rule in $defaultOutboundRules) {
+                        $ruleReport += New-RuleReportRow $subscription $metadata $nsg $rule `
+                            "Default" "Default" $subnetList $nicList
+                    }
                 }
+                else {
+                    foreach ($rule in $customOutboundRules) {
+                        $ruleReport += New-RuleReportRow $subscription $metadata $nsg $rule `
+                            "Custom" "Custom" $subnetList $nicList
+                    }
 
-                foreach ($rule in $defaultOutboundRules) {
-
-                    $customAndDefaultReport += New-RuleReportRow `
-                        -Subscription $subscription `
-                        -NSG $nsg `
-                        -Rule $rule `
-                        -RuleType "Default" `
-                        -ConnectedSubnets $subnetList `
-                        -ConnectedNICs $nicList
+                    # Retain Azure default rows underneath custom NSGs for full visibility.
+                    foreach ($rule in $defaultOutboundRules) {
+                        $ruleReport += New-RuleReportRow $subscription $metadata $nsg $rule `
+                            "Custom" "Default" $subnetList $nicList
+                    }
                 }
             }
         }
         catch {
             $message = $_.Exception.Message
-
-            Write-Warning `
-                "NSG failed: $($nsg.Name) - $message"
+            Write-Warning "NSG failed: $($nsg.Name) - $message"
 
             $errorReport += [PSCustomObject]@{
                 SubscriptionName = $subscription.Name
+                Environment      = $metadata.Environment
+                Custodian        = $metadata.Custodian
                 ResourceGroup    = $nsg.ResourceGroupName
                 NSGName          = $nsg.Name
                 ErrorType        = "NSG"
@@ -280,249 +302,202 @@ foreach ($subscription in $subscriptions) {
 }
 
 # ============================================================
-# BUILD UNIQUE NSG LISTS
+# BUILD SUMMARY - OVERALL + EVERY SUBSCRIPTION
 # ============================================================
 
-$defaultNSGs = @(
-    $defaultOnlyReport |
-    Select-Object `
-        SubscriptionName,
-        ResourceGroup,
-        NSGName `
-        -Unique |
-    ForEach-Object {
-        [PSCustomObject]@{
-            SubscriptionName = $_.SubscriptionName
-            ResourceGroup    = $_.ResourceGroup
-            NSGName          = $_.NSGName
-            Classification   = "Default"
-        }
-    }
-)
-
-$customNSGs = @(
-    $customAndDefaultReport |
-    Where-Object {
-        $_.RuleType -eq "Custom"
-    } |
-    Select-Object `
-        SubscriptionName,
-        ResourceGroup,
-        NSGName `
-        -Unique |
-    ForEach-Object {
-        [PSCustomObject]@{
-            SubscriptionName = $_.SubscriptionName
-            ResourceGroup    = $_.ResourceGroup
-            NSGName          = $_.NSGName
-            Classification   = "Custom"
-        }
-    }
-)
-
-$allNSGs = @($defaultNSGs) + @($customNSGs)
-
-# ============================================================
-# OVERALL SUMMARY
-# ============================================================
-
-$totalNSGCount = $allNSGs.Count
-
-$defaultNSGCount = @(
-    $allNSGs |
-    Where-Object {
-        $_.Classification -eq "Default"
-    }
-).Count
-
-$customNSGCount = @(
-    $allNSGs |
-    Where-Object {
-        $_.Classification -eq "Custom"
-    }
-).Count
-
-$nsgSummary = @(
+$summaryRows = @(
     [PSCustomObject]@{
         Scope            = "Overall"
         SubscriptionName = "ALL SUBSCRIPTIONS"
-        TotalNSGs        = $totalNSGCount
-        DefaultNSGs      = $defaultNSGCount
-        CustomNSGs       = $customNSGCount
+        Environment      = "ALL"
+        Custodian        = "ALL"
+        TotalNSGs        = $nsgInventory.Count
+        UnattachedNSGs   = @($nsgInventory | Where-Object Classification -eq "Unattached").Count
+        DefaultNSGs      = @($nsgInventory | Where-Object Classification -eq "Default").Count
+        CustomNSGs       = @($nsgInventory | Where-Object Classification -eq "Custom").Count
+        Errors           = $errorReport.Count
     }
 )
 
-# ============================================================
-# SUBSCRIPTION-WISE SUMMARY
-# Includes subscriptions with zero NSGs
-# ============================================================
+foreach ($subscription in ($subscriptions | Sort-Object Name)) {
+    $metadata = Get-SubscriptionMetadata $subscription.Name
+    $subscriptionNSGs = @($nsgInventory | Where-Object SubscriptionName -eq $subscription.Name)
+    $subscriptionErrors = @($errorReport | Where-Object SubscriptionName -eq $subscription.Name)
 
-$subscriptionSummary = @(
-    foreach ($subscription in $subscriptions) {
-
-        $subscriptionNSGs = @(
-            $allNSGs |
-            Where-Object {
-                $_.SubscriptionName -eq $subscription.Name
-            }
-        )
-
-        $subscriptionDefault = @(
-            $subscriptionNSGs |
-            Where-Object {
-                $_.Classification -eq "Default"
-            }
-        ).Count
-
-        $subscriptionCustom = @(
-            $subscriptionNSGs |
-            Where-Object {
-                $_.Classification -eq "Custom"
-            }
-        ).Count
-
-        [PSCustomObject]@{
-            Scope            = "Subscription"
-            SubscriptionName = $subscription.Name
-            TotalNSGs        = $subscriptionNSGs.Count
-            DefaultNSGs      = $subscriptionDefault
-            CustomNSGs       = $subscriptionCustom
-        }
+    $summaryRows += [PSCustomObject]@{
+        Scope            = "Subscription"
+        SubscriptionName = $subscription.Name
+        Environment      = $metadata.Environment
+        Custodian        = $metadata.Custodian
+        TotalNSGs        = $subscriptionNSGs.Count
+        UnattachedNSGs   = @($subscriptionNSGs | Where-Object Classification -eq "Unattached").Count
+        DefaultNSGs      = @($subscriptionNSGs | Where-Object Classification -eq "Default").Count
+        CustomNSGs       = @($subscriptionNSGs | Where-Object Classification -eq "Custom").Count
+        Errors           = $subscriptionErrors.Count
     }
-)
-
-$nsgSummary += @(
-    $subscriptionSummary |
-    Sort-Object SubscriptionName
-)
-
-# ============================================================
-# CREATE EXCEL REPORT
-# ============================================================
-
-$excelPath = Join-Path $PWD "NSG-Outbound-Analysis.xlsx"
-
-if (Test-Path $excelPath) {
-    Remove-Item $excelPath -Force
 }
 
-try {
-    # --------------------------------------------
-    # Worksheet 1: Summary
-    # --------------------------------------------
+# ============================================================
+# CREATE WORKBOOK
+# ============================================================
 
-    $nsgSummary |
-        Export-Excel `
-            -Path $excelPath `
-            -WorksheetName "NSG Summary" `
+$excelPath = Join-Path $PWD "NSG-Outbound-Analysis-By-Custodian.xlsx"
+if (Test-Path $excelPath) { Remove-Item $excelPath -Force }
+
+try {
+    $summaryRows |
+        Export-Excel -Path $excelPath `
+            -WorksheetName "Summary" `
             -TableName "NSGSummary" `
             -TableStyle Medium4 `
-            -AutoSize `
-            -AutoFilter `
-            -FreezeTopRow `
-            -BoldTopRow
+            -AutoSize -AutoFilter -FreezeTopRow -BoldTopRow
 
-    # --------------------------------------------
-    # Worksheet 2: Default outbound only
-    # --------------------------------------------
+    $package = Open-ExcelPackage -Path $excelPath
+    $usedSheetNames = @{ "summary" = $true; "errors" = $true }
+    $tableCounter = 1
 
-    if ($defaultOnlyReport.Count -gt 0) {
+    $unattachedColumns = @(
+        "SubscriptionName", "ResourceGroup", "NSGName",
+        "ConnectedSubnets", "ConnectedNICs", "Status"
+    )
 
-        $defaultOnlyReport |
-            Sort-Object `
-                SubscriptionName,
-                ResourceGroup,
-                NSGName,
-                Priority |
-            Export-Excel `
-                -Path $excelPath `
-                -WorksheetName "Default Outbound Only" `
-                -TableName "DefaultOutboundNSGs" `
-                -TableStyle Medium4 `
-                -AutoSize `
-                -AutoFilter `
-                -FreezeTopRow `
-                -BoldTopRow `
-                -Append
-    }
+    $ruleColumns = @(
+        "SubscriptionName", "ResourceGroup", "NSGName",
+        "ConnectedSubnets", "ConnectedNICs", "RuleType", "RuleName",
+        "Priority", "Direction", "Access", "Protocol", "Source",
+        "SourcePorts", "Destination", "DestinationPorts"
+    )
 
-    # --------------------------------------------
-    # Worksheet 3: Custom and default rules
-    # --------------------------------------------
+    $custodians = @(
+        @($nsgInventory.Custodian) + @($errorReport.Custodian) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Sort-Object -Unique
+    )
 
-    if ($customAndDefaultReport.Count -gt 0) {
+    foreach ($custodian in $custodians) {
+        $sheetName = Get-SafeWorksheetName $custodian $usedSheetNames
+        $worksheet = $package.Workbook.Worksheets.Add($sheetName)
+        $currentRow = 1
 
-        $customAndDefaultReport |
-            Sort-Object `
-                SubscriptionName,
-                ResourceGroup,
-                NSGName,
-                Priority |
-            Export-Excel `
-                -Path $excelPath `
-                -WorksheetName "Custom and Default Rules" `
-                -TableName "CustomDefaultNSGs" `
-                -TableStyle Medium4 `
-                -AutoSize `
-                -AutoFilter `
-                -FreezeTopRow `
-                -BoldTopRow `
-                -Append
-    }
+        $custodianEnvironments = @(
+            @($nsgInventory | Where-Object Custodian -eq $custodian).Environment +
+            @($errorReport | Where-Object Custodian -eq $custodian).Environment |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Sort-Object -Unique
+        )
 
-    # --------------------------------------------
-    # Worksheet 4: Errors
-    # Created only when errors exist
-    # --------------------------------------------
+        $orderedEnvironments = @(
+            $custodianEnvironments |
+            Sort-Object @{ Expression = {
+                switch ($_) {
+                    "DEV"  { 1 }
+                    "PROD" { 2 }
+                    default { 3 }
+                }
+            } }, @{ Expression = { $_ } }
+        )
 
-    if ($errorReport.Count -gt 0) {
+        foreach ($environment in $orderedEnvironments) {
+            $worksheet.Cells[$currentRow, 1].Value = "$environment - $custodian"
+            $worksheet.Cells[$currentRow, 1, $currentRow, $ruleColumns.Count].Merge = $true
+            $worksheet.Cells[$currentRow, 1, $currentRow, $ruleColumns.Count].Style.Font.Bold = $true
+            $worksheet.Cells[$currentRow, 1, $currentRow, $ruleColumns.Count].Style.Font.Size = 14
+            $currentRow += 2
 
-        $errorReport |
-            Export-Excel `
-                -Path $excelPath `
-                -WorksheetName "Errors" `
-                -TableName "NSGErrors" `
-                -TableStyle Medium4 `
-                -AutoSize `
-                -AutoFilter `
-                -FreezeTopRow `
-                -BoldTopRow `
-                -Append
-    }
+            $unattachedRows = @(
+                $nsgInventory |
+                Where-Object {
+                    $_.Custodian -eq $custodian -and
+                    $_.Environment -eq $environment -and
+                    $_.Classification -eq "Unattached"
+                } |
+                Sort-Object SubscriptionName, ResourceGroup, NSGName
+            )
 
-    # --------------------------------------------
-    # Keep colour only on headings
-    # Remove alternating row colours
-    # --------------------------------------------
+            $defaultRows = @(
+                $ruleReport |
+                Where-Object {
+                    $_.Custodian -eq $custodian -and
+                    $_.Environment -eq $environment -and
+                    $_.Classification -eq "Default"
+                } |
+                Sort-Object SubscriptionName, ResourceGroup, NSGName, Priority
+            )
 
-    $excelPackage = Open-ExcelPackage -Path $excelPath
+            $customRows = @(
+                $ruleReport |
+                Where-Object {
+                    $_.Custodian -eq $custodian -and
+                    $_.Environment -eq $environment -and
+                    $_.Classification -eq "Custom"
+                } |
+                Sort-Object SubscriptionName, ResourceGroup, NSGName, Priority
+            )
 
-    foreach ($worksheet in $excelPackage.Workbook.Worksheets) {
+            $currentRow = Write-WorksheetSection $worksheet $currentRow `
+                "$environment - Unattached NSGs" $unattachedRows $unattachedColumns `
+                "Table_$($tableCounter)_Unattached"
+            $tableCounter++
 
-        foreach ($table in $worksheet.Tables) {
-            $table.ShowRowStripes    = $false
-            $table.ShowColumnStripes = $false
-            $table.ShowFirstColumn   = $false
-            $table.ShowLastColumn    = $false
+            $currentRow = Write-WorksheetSection $worksheet $currentRow `
+                "$environment - Default Outbound Only" $defaultRows $ruleColumns `
+                "Table_$($tableCounter)_Default"
+            $tableCounter++
+
+            $currentRow = Write-WorksheetSection $worksheet $currentRow `
+                "$environment - Custom and Default Outbound Rules" $customRows $ruleColumns `
+                "Table_$($tableCounter)_Custom"
+            $tableCounter++
+
+            $currentRow += 2
+        }
+
+        $worksheet.View.FreezePanes(2, 1)
+        $worksheet.Cells[$worksheet.Dimension.Address].AutoFitColumns()
+
+        for ($column = 1; $column -le $worksheet.Dimension.End.Column; $column++) {
+            if ($worksheet.Column($column).Width -gt 45) {
+                $worksheet.Column($column).Width = 45
+            }
         }
     }
 
-    Close-ExcelPackage $excelPackage
+    if ($errorReport.Count -gt 0) {
+        $errorSheet = $package.Workbook.Worksheets.Add("Errors")
+        $errorColumns = @(
+            "SubscriptionName", "Environment", "Custodian", "ResourceGroup",
+            "NSGName", "ErrorType", "ErrorMessage"
+        )
+        [void](Write-WorksheetSection $errorSheet 1 "Collection Errors" `
+            $errorReport $errorColumns "Table_$($tableCounter)_Errors")
+        $errorSheet.Cells[$errorSheet.Dimension.Address].AutoFitColumns()
+        for ($column = 1; $column -le $errorSheet.Dimension.End.Column; $column++) {
+            if ($errorSheet.Column($column).Width -gt 60) {
+                $errorSheet.Column($column).Width = 60
+            }
+        }
+    }
+
+    foreach ($table in $package.Workbook.Worksheets["Summary"].Tables) {
+        $table.ShowRowStripes = $false
+        $table.ShowColumnStripes = $false
+    }
+
+    Close-ExcelPackage $package
 
     Write-Host ""
-    Write-Host "========================================" `
-        -ForegroundColor Green
-    Write-Host "Report completed successfully" `
-        -ForegroundColor Green
-    Write-Host "========================================" `
-        -ForegroundColor Green
-
+    Write-Host "Report completed successfully" -ForegroundColor Green
     Write-Host "Excel file: $excelPath"
-    Write-Host "Total NSGs: $totalNSGCount"
-    Write-Host "Default NSGs: $defaultNSGCount"
-    Write-Host "Custom NSGs: $customNSGCount"
+    Write-Host "Total NSGs: $($nsgInventory.Count)"
+    Write-Host "Unattached: $(@($nsgInventory | Where-Object Classification -eq 'Unattached').Count)"
+    Write-Host "Default: $(@($nsgInventory | Where-Object Classification -eq 'Default').Count)"
+    Write-Host "Custom: $(@($nsgInventory | Where-Object Classification -eq 'Custom').Count)"
+    Write-Host "Custodian sheets: $($custodians.Count)"
     Write-Host "Errors: $($errorReport.Count)"
 }
 catch {
+    if ($null -ne $package) {
+        try { Close-ExcelPackage $package -NoSave } catch {}
+    }
     Write-Error "Excel report creation failed: $($_.Exception.Message)"
 }
