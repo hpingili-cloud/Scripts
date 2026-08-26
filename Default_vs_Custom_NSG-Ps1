@@ -115,7 +115,7 @@ function Write-WorksheetSection {
         [string]$TableName
     )
 
-    $Worksheet.Cells[$StartRow, 1].Value = $Title
+    $Worksheet.SetValue($StartRow, 1, $Title)
     $Worksheet.Cells[$StartRow, 1, $StartRow, $Columns.Count].Merge = $true
     $Worksheet.Cells[$StartRow, 1, $StartRow, $Columns.Count].Style.Font.Bold = $true
     $Worksheet.Cells[$StartRow, 1, $StartRow, $Columns.Count].Style.Font.Color.SetColor([System.Drawing.Color]::White)
@@ -124,7 +124,7 @@ function Write-WorksheetSection {
 
     $headerRow = $StartRow + 1
     for ($columnIndex = 0; $columnIndex -lt $Columns.Count; $columnIndex++) {
-        $Worksheet.Cells[$headerRow, $columnIndex + 1].Value = $Columns[$columnIndex]
+        $Worksheet.SetValue($headerRow, $columnIndex + 1, $Columns[$columnIndex])
     }
 
     $Worksheet.Cells[$headerRow, 1, $headerRow, $Columns.Count].Style.Font.Bold = $true
@@ -132,7 +132,7 @@ function Write-WorksheetSection {
     $Worksheet.Cells[$headerRow, 1, $headerRow, $Columns.Count].Style.Fill.BackgroundColor.SetColor([System.Drawing.Color]::FromArgb(217, 210, 233))
 
     if ($Rows.Count -eq 0) {
-        $Worksheet.Cells[$headerRow + 1, 1].Value = "No records"
+        $Worksheet.SetValue($headerRow + 1, 1, "No records")
         return ($headerRow + 3)
     }
 
@@ -140,7 +140,7 @@ function Write-WorksheetSection {
     foreach ($item in $Rows) {
         for ($columnIndex = 0; $columnIndex -lt $Columns.Count; $columnIndex++) {
             $propertyName = $Columns[$columnIndex]
-            $Worksheet.Cells[$dataRow, $columnIndex + 1].Value = $item.$propertyName
+            $Worksheet.SetValue($dataRow, $columnIndex + 1, $item.$propertyName)
         }
         $dataRow++
     }
@@ -350,7 +350,7 @@ try {
             -WorksheetName "Summary" `
             -TableName "NSGSummary" `
             -TableStyle Medium4 `
-            -AutoSize -AutoFilter -FreezeTopRow -BoldTopRow
+            -AutoFilter -FreezeTopRow -BoldTopRow
 
     $package = Open-ExcelPackage -Path $excelPath
     $usedSheetNames = @{ "summary" = $true; "errors" = $true }
@@ -398,7 +398,7 @@ try {
         )
 
         foreach ($environment in $orderedEnvironments) {
-            $worksheet.Cells[$currentRow, 1].Value = "$environment - $custodian"
+            $worksheet.SetValue($currentRow, 1, "$environment - $custodian")
             $worksheet.Cells[$currentRow, 1, $currentRow, $ruleColumns.Count].Merge = $true
             $worksheet.Cells[$currentRow, 1, $currentRow, $ruleColumns.Count].Style.Font.Bold = $true
             $worksheet.Cells[$currentRow, 1, $currentRow, $ruleColumns.Count].Style.Font.Size = 14
@@ -453,12 +453,10 @@ try {
         }
 
         $worksheet.View.FreezePanes(2, 1)
-        $worksheet.Cells[$worksheet.Dimension.Address].AutoFitColumns()
 
+        # Fixed widths are used because AutoFit is unavailable in Azure Cloud Shell/Linux.
         for ($column = 1; $column -le $worksheet.Dimension.End.Column; $column++) {
-            if ($worksheet.Column($column).Width -gt 45) {
-                $worksheet.Column($column).Width = 45
-            }
+            $worksheet.Column($column).Width = if ($column -in @(1, 2, 3, 4, 5, 7, 12, 14)) { 32 } else { 16 }
         }
     }
 
@@ -470,11 +468,8 @@ try {
         )
         [void](Write-WorksheetSection $errorSheet 1 "Collection Errors" `
             $errorReport $errorColumns "Table_$($tableCounter)_Errors")
-        $errorSheet.Cells[$errorSheet.Dimension.Address].AutoFitColumns()
         for ($column = 1; $column -le $errorSheet.Dimension.End.Column; $column++) {
-            if ($errorSheet.Column($column).Width -gt 60) {
-                $errorSheet.Column($column).Width = 60
-            }
+            $errorSheet.Column($column).Width = if ($column -eq 7) { 60 } else { 24 }
         }
     }
 
