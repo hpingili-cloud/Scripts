@@ -1,0 +1,588 @@
+New Custodian — Infrastructure Deployment
+Purpose
+
+This page explains how to configure and deploy the infrastructure for a new custodian after all items on the Custodian Setup Prerequisites page are complete.
+
+Complete the steps in the order shown below. Smoke testing is handled on a separate page after the infrastructure deployment is complete.
+
+Required Links
+
+Add the correct repository and pipeline links before publishing this page.
+
+Resource	Link
+ADH Platform repository	[Add link]
+Custodian Infrastructure repository	[Add link]
+Internal Pipelines repository	[Add link]
+Azure DevOps Environments	[Add link]
+Infrastructure deployment pipeline	[Add link]
+Databricks deployment pipeline	[Add link]
+Unity Catalog deployment pipeline	[Add link]
+DIF deployment pipeline	[Add link]
+IDP deployment pipeline	[Add link]
+Databricks SPN Token SOP	[Add SharePoint link]
+Custodian Manager application	[Add link]
+Deployment Summary
+S.No.	Step/Description	Category	Owner/Assigned To
+1	Create the SQLite connection for the new custodian	DevOps	IaC Executors
+2	Add the new subscription IDs to the Terraform backend configuration	DevOps	IaC Executors
+3	Add the custodian name to the internal pipelines	DevOps	IaC Executors
+4	Add the custodian details under Azure DevOps Environments	DevOps	IaC Executors
+5	Create the standard custodian folder structure	DevOps	IaC Executors
+6	Configure modules_manifest.csv	DevOps	IaC Executors
+7	Create the required .tfvars files	DevOps	IaC Executors
+8	Configure Core Infrastructure Terraform	DevOps	IaC Executors
+9	Configure Network Terraform	Network	IaC Executors
+10	Configure Key Vault, storage and supporting resources	DevOps	IaC Executors
+11	Configure Databricks Internal Terraform	Databricks	IaC Executors
+12	Create the custodian deployment YAML pipelines	DevOps	IaC Executors
+13	Raise the required ADLS and database access requests	Databricks	Bhavani/Akash
+14	Verify and apply the required database administrator settings	Databricks	IaC Executors
+15	Generate Databricks service principal tokens	DevOps	IaC Executors
+16	Run the Unity Catalog deployment pipeline	DevOps	IaC Executors
+17	Populate the Infrastructure Key Vault secrets	DevOps	IaC Executors
+18	Run the DIF pipeline	DevOps	IaC Executors
+19	Add the custodian IDP pipeline	DevOps	IaC Executors
+20	Update the IDP ID value in the infrastructure configuration	DevOps	IaC Executors
+21	Run the IDP pipeline	DevOps	IaC Executors
+22	Validate the Infrastructure and Custodian Key Vault configuration	DevOps	IaC Executors
+23	Run the managed-upload configuration script	Custodian Operations	IaC Executors
+24	Bind the databases to the custodian development workspaces	Custodian Operations	IaC Executors
+25	Add the SPN and ADF managed identity to the custodian Azure service groups	Identity and Access	IaC Executors
+26	Apply and validate the required permissions	Identity and Access	IaC Executors
+27	Populate the Infrastructure Key Vault secrets required by DIF and IDP	DevOps	IaC Executors
+28	Add the custodian information to the Custodian Manager application	Custodian Operations	IaC Executors
+Detailed Deployment Instructions
+Step 1: Create the SQLite Connection
+
+Category: DevOps
+Owner: IaC Executors
+
+Create the SQLite connection for the new custodian in both Non-Production and Production.
+
+Update the required configuration in the ADH Platform repository.
+
+Repository: [Add ADH Platform repository link]
+
+Complete when:
+
+Non-Production connection is configured.
+Production connection is configured.
+The configuration has been reviewed and merged.
+Step 2: Add the Subscription IDs
+
+Category: DevOps
+Owner: IaC Executors
+
+Add the new custodian subscription IDs to the Terraform backend configuration.
+
+Update the following environments as applicable:
+
+Development
+Test
+Staging
+Production
+
+Configuration file: terraform_backend_config.csv
+Repository: [Add repository link]
+
+Complete when: All new subscription IDs are present under the correct environments.
+
+Step 3: Add the Custodian to Internal Pipelines
+
+Category: DevOps
+Owner: IaC Executors
+
+Add the new custodian name to the internal pipeline configuration.
+
+Confirm that the name follows the existing custodian naming convention.
+
+Repository: [Add Internal Pipelines repository link]
+
+Complete when: The custodian is available as an option in the required internal pipelines.
+
+Step 4: Add the Custodian to Azure DevOps Environments
+
+Category: DevOps
+Owner: IaC Executors
+
+Add the custodian details under Azure DevOps Environments.
+
+Create an entry for every required environment:
+
+DEV
+TST
+STG
+PRD
+
+Azure DevOps Environments: [Add link]
+
+Configure the required approvals and pipeline permissions.
+
+Complete when: All custodian environments are available and authorized for pipeline deployment.
+
+Step 5: Create the Custodian Folder Structure
+
+Category: DevOps
+Owner: IaC Executors
+
+Copy the standard Non-Production custodian structure.
+
+Create the custodian folder using the approved custodian name or code.
+
+Do not change the standard folder hierarchy unless the custodian has an approved special requirement.
+
+Repository: [Add repository link]
+
+Complete when: The complete standard folder structure exists for the new custodian.
+
+Step 6: Configure modules_manifest.csv
+
+Category: DevOps
+Owner: IaC Executors
+
+Open modules_manifest.csv and enable the Terraform modules required for the custodian.
+
+The selected modules must match the services confirmed during the custodian requirements stage.
+
+Complete when:
+
+Required modules are enabled.
+Unrequired modules are not enabled.
+The module list has been reviewed against the custodian requirements.
+Step 7: Create the Required .tfvars Files
+
+Category: DevOps
+Owner: IaC Executors
+
+Create all required Terraform variable files for the custodian.
+
+Use the standard custodian template and update only the custodian-specific values.
+
+The configuration may include:
+
+Custodian name and code
+Environment
+Region
+Subscription ID
+CIDR ranges
+Resource names
+Required services
+Resource tags
+Owner information
+
+Complete when: All required .tfvars files exist and contain the correct environment-specific values.
+
+Step 8: Configure Core Infrastructure Terraform
+
+Category: DevOps
+Owner: IaC Executors
+
+Configure the required Core Infrastructure modules.
+
+Based on the custodian requirements, this may include:
+
+KTK infrastructure
+CORE infrastructure
+Private endpoint infrastructure
+SAB infrastructure
+Resource-role assignments
+Managed identities
+PostgreSQL flexible server
+Custom private endpoints
+Resource locks
+Diagnostic settings
+Event Hub
+Key Vault
+Storage accounts
+
+Create a folder using the custodian name where required by the standard structure.
+
+Complete when: All required Core Infrastructure Terraform files are configured.
+
+Step 9: Configure Network Terraform
+
+Category: Network
+Owner: IaC Executors
+
+Configure the network resources required by the custodian.
+
+This may include:
+
+Virtual network
+Subnets
+Network security groups
+Private endpoints
+Private DNS configuration
+Route configuration
+CIDR assignments
+
+Use only the CIDR ranges approved during the prerequisite stage.
+
+Complete when:
+
+The network configuration uses the approved CIDR ranges.
+Required private endpoints are configured.
+No overlapping address ranges are present.
+Step 10: Configure Key Vault, Storage and Supporting Resources
+
+Category: DevOps
+Owner: IaC Executors
+
+Configure the required platform resources for the custodian.
+
+This may include:
+
+Infrastructure Key Vault
+Custodian Key Vault
+Storage accounts
+Resource locks
+Diagnostic settings
+Event Hub configuration
+Log-storage configuration
+Required role assignments
+
+Do not place secret values directly in Terraform files.
+
+Complete when: All required resources and role assignments are defined in the Terraform configuration.
+
+Step 11: Configure Databricks Internal Terraform
+
+Category: Databricks
+Owner: IaC Executors
+
+Configure the Databricks resources required by the custodian.
+
+The configuration may include:
+
+Databricks workspaces
+Access connector
+SQL warehouse
+Secret scopes
+Workspace permissions
+Metastore assignment
+External locations
+Storage credentials
+Catalog permissions
+Service-principal permissions
+Managed service permissions
+
+Configure the required environments separately.
+
+Complete when: All required Databricks Terraform configuration is ready for deployment.
+
+Step 12: Create the Deployment YAML Pipelines
+
+Category: DevOps
+Owner: IaC Executors
+
+Copy the standard Non-Production pipeline structure and create the custodian deployment YAML.
+
+Configure the pipelines required for:
+
+Core infrastructure
+Network infrastructure
+Databricks infrastructure
+Unity Catalog
+DIF
+IDP
+
+Add links to every pipeline after creation.
+
+Complete when:
+
+All required pipelines exist.
+Variable groups are linked.
+Service connections are configured.
+Agent pools are configured.
+Environment approvals are configured.
+Step 13: Raise the Required Access Requests
+
+Category: Databricks
+Owner: Bhavani/Akash
+
+After the infrastructure resources are created, raise the required access requests.
+
+The Excel tracker identifies requests for:
+
+ADLS Storage Blob Data Contributor access for the Databricks access connector
+Required ADLS group access
+Required database group access
+Required account-console access
+Required workspace access
+
+Record the request number for each access request.
+
+Complete when: All required access requests have been approved and applied.
+
+Step 14: Verify Database Administrator Settings
+
+Category: Databricks
+Owner: IaC Executors
+
+After access is granted, verify and apply the required database administrator settings.
+
+Validate access for the applicable groups and service principals, including:
+
+Developers
+QA testers
+Operations
+Databricks administrators
+Custodian service principal
+ADF managed identity
+
+The exact permissions must follow the database-access matrix maintained by the team.
+
+Database-access matrix: [Add link]
+
+Complete when: All required database access has been manually validated.
+
+Step 15: Generate Databricks SPN Tokens
+
+Category: DevOps
+Owner: IaC Executors
+
+Generate the required Databricks service principal tokens by following the approved SOP.
+
+Databricks SPN Token SOP: [Add SharePoint link]
+
+Store the generated tokens only in the approved Key Vault.
+
+Do not add token values to:
+
+Source code
+Pipeline YAML
+Variable files
+Confluence
+Email
+Deployment evidence
+
+Complete when: The required tokens are available in Key Vault.
+
+Step 16: Run the Unity Catalog Deployment Pipeline
+
+Category: DevOps
+Owner: IaC Executors
+
+Run the Unity Catalog deployment pipeline for the custodian.
+
+Pipeline: [Add Unity Catalog deployment pipeline link]
+
+Validate the creation of:
+
+Catalogs
+Schemas
+Storage credentials
+External locations
+Grants and permissions
+
+Complete when: The pipeline completes successfully and the required Unity Catalog objects are available.
+
+Step 17: Populate Infrastructure Key Vault Secrets
+
+Category: DevOps
+Owner: IaC Executors
+
+Populate the Infrastructure Key Vault with the secrets required by the custodian deployment.
+
+This includes the required values for:
+
+Resource locks
+Storage logs
+Infrastructure pipelines
+Databricks deployment
+DIF
+IDP
+
+Complete when: All required secret names exist and contain the correct values.
+
+Step 18: Run the DIF Pipeline
+
+Category: DevOps
+Owner: IaC Executors
+
+Run the DIF pipeline to create the required pipelines under the custodian Delta Ingestion folder.
+
+Use the Classic Pipelines location identified in the Excel tracker.
+
+Pipeline: [Add DIF pipeline link]
+
+Complete when:
+
+The pipeline completes successfully.
+The required custodian pipelines are created.
+The pipelines appear under the correct Delta Ingestion folder.
+Step 19: Add the IDP Pipeline
+
+Category: DevOps
+Owner: IaC Executors
+
+Add the custodian IDP pipeline using the standard pipeline configuration.
+
+Update the configuration with the correct:
+
+Custodian name
+Custodian code
+Environment
+Subscription
+Key Vault
+Service connection
+Variable group
+
+Complete when: The IDP pipeline is available in the custodian Azure DevOps project.
+
+Step 20: Update the IDP ID Value
+
+Category: DevOps
+Owner: IaC Executors
+
+Open the custodian infrastructure configuration and update the required IDP ID value.
+
+Confirm that the ID belongs to the correct custodian and environment.
+
+Repository: [Add Custodian Infrastructure repository link]
+
+Complete when: The correct IDP ID value is committed and merged.
+
+Step 21: Run the IDP Pipeline
+
+Category: DevOps
+Owner: IaC Executors
+
+Run the IDP pipeline for the new custodian.
+
+Pipeline: [Add IDP pipeline link]
+
+Review the pipeline output and resolve any deployment failures before continuing.
+
+Complete when: The IDP pipeline finishes successfully.
+
+Step 22: Validate Key Vault Configuration
+
+Category: DevOps
+Owner: IaC Executors
+
+Validate the following:
+
+Infrastructure Key Vault JSON
+Custodian Key Vault configuration
+Required secret names
+Environment-specific values
+Pipeline access to Key Vault
+Managed identity access to Key Vault
+
+Do not include secret values in the validation evidence.
+
+Complete when: Both Key Vault configurations are correct and accessible to the required pipelines and identities.
+
+Step 23: Configure Managed Upload
+
+Category: Custodian Operations
+Owner: IaC Executors
+
+Run the approved script for the custodian managed-upload configuration.
+
+Script or procedure: [Add link]
+
+Use the correct custodian and environment values.
+
+Complete when: Managed upload is configured successfully for the required environments.
+
+Step 24: Bind the Databases
+
+Category: Custodian Operations
+Owner: IaC Executors
+
+Run the approved script to bind the required databases to the custodian development workspaces.
+
+Script or procedure: [Add link]
+
+Validate the binding in every applicable development workspace.
+
+Complete when: The required databases are available from the custodian development workspaces.
+
+Step 25: Add Identities to the Custodian Azure Service Groups
+
+Category: Identity and Access
+Owner: IaC Executors
+
+Add the following identities to the appropriate custodian Azure service groups:
+
+Custodian service principal
+Azure Data Factory managed identity
+
+Use the correct groups for each environment.
+
+Complete when: Both identities are members of the required Azure service groups.
+
+Step 26: Apply and Validate Permissions
+
+Category: Identity and Access
+Owner: IaC Executors
+
+Apply the required permissions for:
+
+ADF
+DTS
+Databases
+Databricks
+Key Vault
+Resource locks
+Storage logs
+Managed upload
+Required read and write operations
+
+Follow the approved permissions matrix.
+
+Permissions matrix: [Add link]
+
+Complete when: The required identities can perform their expected operations without receiving authorization errors.
+
+Step 27: Complete the DIF and IDP Key Vault Configuration
+
+Category: DevOps
+Owner: IaC Executors
+
+Confirm that all Key Vault secrets required by the DIF and IDP pipelines are populated.
+
+Update only missing or incorrect values.
+
+Rerun the applicable pipeline if a Key Vault value was changed after the original deployment.
+
+Complete when: DIF and IDP pipelines can retrieve all required values successfully.
+
+Step 28: Update the Custodian Manager Application
+
+Category: Custodian Operations
+Owner: IaC Executors
+
+Add the new custodian information to the Custodian Manager application.
+
+Custodian Manager application: [Add link]
+
+Update the required custodian and environment details.
+
+The Excel tracker notes that confirmation is required regarding which application information must be updated.
+
+Complete when: The application owner confirms that the new custodian information is complete.
+
+Infrastructure Deployment Completion Checklist
+ All required Terraform configuration is created.
+ Pull requests are approved and merged.
+ Infrastructure pipelines completed successfully.
+ Network resources were deployed successfully.
+ Databricks workspaces and internal resources are available.
+ Required access requests were completed.
+ Database settings and permissions were validated.
+ Unity Catalog deployment completed successfully.
+ DIF pipelines were created.
+ IDP deployment completed successfully.
+ Required Key Vault values are populated.
+ Required service groups and identities are configured.
+ Custodian Manager application is updated.
+ Repository and pipeline links are recorded.
+Next Step
+
+After this page is complete, continue to:
+
+New Custodian — Smoke Testing
+[Add Confluence child-page link]
