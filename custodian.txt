@@ -1,0 +1,311 @@
+Custodian Setup Prerequisites
+Purpose
+
+This page lists all prerequisites that must be completed before starting a new custodian build.
+
+Complete the steps in the order shown below. Do not begin the infrastructure deployment until all applicable prerequisites are confirmed.
+
+Prerequisite Summary
+S.No.	Step/Description	Category	Owner/Assigned To
+1	Custodian details will be provided	ADH Platform	Manish
+2	Create the CMDB approver group	ADH Platform	IaC Executors
+3	Raise a request with Cloud Administration to add the subscriptions to the ADH management group	ADH Platform	Sayee
+4	Extend the CIDR range to /25 and add the subscriptions to the IPAM management group	ADH Platform	Manish
+5	Run the AzEntraGroup-Standard pipeline to create the AD groups and validate them in Microsoft Entra ID	Identity	Sahithya/Kamalesh
+6	Check the custodian groups in SharePoint	Identity	IaC Executors
+7	Request SCIM synchronization for the custodian groups	Identity	IaC Executors
+8	Notify KEN with the custodian code, environment details, subscription information and required services	Identity	IaC Executors
+9	Configure the Azure DevOps token, agent pools and permissions	DevOps	IaC Executors
+10	Configure the required Azure DevOps libraries	DevOps	Ken/Karthik
+11	Create the Azure DevOps project and import the required pipelines	DevOps	Ken/Karthik
+12	Add the custodian to the Custodian-DIF-Enhancements pipeline	DevOps	Ken/Karthik
+13	Complete the required CMDB requests	CMDB	IaC Executors
+Detailed Instructions
+Step 1: Confirm the Custodian Details
+
+Category: ADH Platform
+Owner: Manish
+
+Obtain and confirm the information required to create the new custodian.
+
+The information should include:
+
+Custodian name
+Custodian code
+Required environments
+Region
+Cost centre
+Custodian owner
+Technical owners
+Required Azure services
+Subscription requirements
+Network requirements
+Expected number of users
+Data storage requirements
+
+Completion check: All required custodian information has been received and confirmed.
+
+Step 2: Create the CMDB Approver Group
+
+Category: ADH Platform
+Owner: IaC Executors
+
+Create the CMDB approver group required for the new custodian.
+
+Instructions: [Add the CMDB group-creation procedure or link]
+
+Information required:
+
+Custodian name
+Custodian code
+Group name
+Group owners
+Group approvers
+
+Completion check: The CMDB approver group has been created and the required approvers have been added.
+
+Step 3: Add the Subscriptions to the ADH Management Group
+
+Category: ADH Platform
+Owner: Sayee
+
+Raise a request with the Cloud Administration team to add the new custodian subscriptions to the ADH management group.
+
+Include:
+
+Custodian name
+Environment
+Subscription name
+Subscription ID
+Required ADH management group
+
+Request link: [Add Cloud Administration request link]
+
+Completion check: All custodian subscriptions are visible under the correct ADH management group.
+
+Step 4: Request the CIDR Range and IPAM Configuration
+
+Category: ADH Platform
+Owner: Manish
+
+Request a /25 CIDR range for each required custodian environment.
+
+Add the new custodian subscriptions to the appropriate IPAM management group.
+
+Include:
+
+Custodian name
+Environment
+Subscription name
+Subscription ID
+Region
+Required CIDR size: /25
+
+Request link: [Add IPAM/network request link]
+
+Completion check:
+
+The CIDR ranges have been assigned.
+There is no overlap with an existing network.
+The subscriptions have been added to the IPAM management group.
+Step 5: Create the Custodian AD Groups
+
+Category: Identity
+Owner: Sahithya/Kamalesh
+
+Run the AzEntraGroup-Standard pipeline to create the required AD groups for the custodian.
+
+Pipeline link: [Add AzEntraGroup-Standard pipeline link]
+
+Provide the required pipeline values, including:
+
+Custodian name
+Custodian code
+Environment
+Group names
+Group owners
+Group approvers
+
+After the pipeline completes, validate that all groups were created successfully in Microsoft Entra ID.
+
+Completion check:
+
+The pipeline completed successfully.
+All required groups are visible in Microsoft Entra ID.
+The group names, owners and approvers are correct.
+Step 6: Validate the Groups in SharePoint
+
+Category: Identity
+Owner: IaC Executors
+
+Confirm that all required custodian groups are available in SharePoint.
+
+Check:
+
+Group name
+Custodian name
+Environment
+Group owner
+Group membership
+
+SharePoint link: [Add SharePoint link]
+
+Completion check: All required custodian groups are visible in SharePoint.
+
+Step 7: Request SCIM Synchronization
+
+Category: Identity
+Owner: IaC Executors
+
+Send a request to the responsible Identity team contacts to synchronize the custodian groups through SCIM.
+
+Include:
+
+Custodian name
+Environment
+Entra ID group names
+Group object IDs
+Required Databricks workspace, if applicable
+
+Email template or request link: [Add the SCIM request instructions]
+
+Completion check: The Identity team confirms that the groups have been synchronized successfully.
+
+Step 8: Notify KEN
+
+Category: Identity
+Owner: IaC Executors
+
+Notify KEN about the new custodian setup.
+
+Provide:
+
+Custodian code
+Custodian name
+Environment details
+Subscription names
+Subscription IDs
+Required services
+Any custodian-specific requirements
+
+Email template: [Add the notification email template]
+
+Completion check: KEN has received and acknowledged the custodian information.
+
+Step 9: Configure Azure DevOps Access
+
+Category: DevOps
+Owner: IaC Executors
+
+Confirm that the required Azure DevOps access is available for the custodian build.
+
+Validate:
+
+Azure DevOps token
+Agent-pool access
+Repository permissions
+Pipeline permissions
+Service-connection permissions
+Environment permissions
+
+Instructions: [Add Azure DevOps access procedure]
+
+Completion check: The IaC executor can access and run the required pipelines.
+
+Step 10: Configure Azure DevOps Libraries
+
+Category: DevOps
+Owner: Ken/Karthik
+
+Create or configure the required Azure DevOps libraries and variable groups for the custodian.
+
+Confirm:
+
+Required variable groups are available.
+Environment-specific values are added.
+Secrets are stored securely.
+Pipeline permissions are granted.
+
+Azure DevOps library link: [Add link]
+
+Completion check: The required libraries are available to the custodian pipelines.
+
+Step 11: Create the Azure DevOps Project and Import Pipelines
+
+Category: DevOps
+Owner: Ken/Karthik
+
+Create the Azure DevOps project for the new custodian.
+
+Import the required pipelines into the project.
+
+Confirm that the following are configured:
+
+Project
+Repositories
+Pipelines
+Service connections
+Variable groups
+Agent pools
+Permissions
+
+Azure DevOps project link: [Add link]
+Pipeline source link: [Add link]
+
+Completion check: The project is available and all required pipelines have been imported successfully.
+
+Step 12: Update the Custodian DIF Enhancement Pipeline
+
+Category: DevOps
+Owner: Ken/Karthik
+
+Add the new custodian to the Custodian-DIF-Enhancements pipeline.
+
+Pipeline link: [Add Custodian-DIF-Enhancements pipeline link]
+
+Update the required custodian configuration, create a pull request and obtain the required approval.
+
+Completion check:
+
+The custodian has been added to the pipeline.
+The pull request has been approved and merged.
+The updated pipeline is available.
+Step 13: Complete the CMDB Requests
+
+Category: CMDB
+Owner: IaC Executors
+
+Submit the required CMDB requests for the new custodian and its resources.
+
+Include the required information for:
+
+Custodian
+Subscriptions
+Environments
+Resource ownership
+Support groups
+Approver groups
+Required services
+
+CMDB request link: [Add link]
+
+Completion check: All required CMDB requests have been completed or approved.
+
+Final Prerequisite Check
+
+Before starting the custodian build, confirm:
+
+ Custodian details are complete.
+ CMDB approver group is created.
+ Subscriptions are under the ADH management group.
+ CIDR ranges are assigned.
+ Subscriptions are added to the IPAM management group.
+ AD groups are created and validated.
+ SharePoint validation is complete.
+ SCIM synchronization is complete.
+ KEN has been notified.
+ Azure DevOps access is ready.
+ Azure DevOps libraries are configured.
+ Azure DevOps project and pipelines are available.
+ The DIF enhancement pipeline is updated.
+ CMDB requests are complete.
