@@ -1,1 +1,6 @@
-I confirmed that VNet Flow Logs are enabled for ADH_CORE_Spoke_VNET_dev; however, Traffic Analytics is disabled and raw flow-log retention is only 10 days. Therefore, no NTANetAnalytics table is available, and 45 days of historical data cannot be queried. I also currently lack access to the flow-log storage account. We need Storage Blob Data Reader access, Traffic Analytics enabled with the central Log Analytics workspace, and retention increased to at least 45 days before completing the outbound whitelist analysis.
+I checked the NSG logs for the last 30 days. The Log Analytics workspace currently only has NetworkSecurityGroupEvent and NetworkSecurityGroupRuleCounter data. This confirms which outbound NSG rules are being hit, but it does not show the actual destination IPs, ports, and protocols needed to build the whitelist.
+
+NSG Flow Logs are enabled, but the detailed flow data is stored in the configured Storage Account, and I currently do not have access to that storage account.
+
+To continue the remediation properly, I need either read access to the NSG Flow Log storage account, or Traffic Analytics enabled so the flow data can be queried from Log Analytics. Once I have that, I can identify the required outbound connections for one NSG, build the whitelist, validate it, and then use the same approach for the remaining 57 NSGs.
+https://learn.microsoft.com/en-us/azure/network-watcher/nsg-flow-logs-manage?utm_source=chatgpt.com&tabs=portal
