@@ -1,5 +1,5 @@
-search *
+AzureDiagnostics
 | where TimeGenerated >= ago(30d)
 | where _ResourceId has "ADH_CORE_PE_dev-nsg"
-| summarize count() by $table
-| order by count_ desc
+| summarize Count=count() by Category
+| order by Count desc
