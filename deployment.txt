@@ -1,6 +1,16 @@
-I checked the NSG logs for the last 30 days. The Log Analytics workspace currently only has NetworkSecurityGroupEvent and NetworkSecurityGroupRuleCounter data. This confirms which outbound NSG rules are being hit, but it does not show the actual destination IPs, ports, and protocols needed to build the whitelist.
+We are working on remediation for the NSG finding where outbound rules allow Any/Any traffic.
 
-NSG Flow Logs are enabled, but the detailed flow data is stored in the configured Storage Account, and I currently do not have access to that storage account.
+Could you please provide the last 30 days of outbound NSG flow-log data for the ADH subscriptions/NSGs in scope?
 
-To continue the remediation properly, I need either read access to the NSG Flow Log storage account, or Traffic Analytics enabled so the flow data can be queried from Log Analytics. Once I have that, I can identify the required outbound connections for one NSG, build the whitelist, validate it, and then use the same approach for the remaining 57 NSGs.
-https://learn.microsoft.com/en-us/azure/network-watcher/nsg-flow-logs-manage?utm_source=chatgpt.com&tabs=portal
+We specifically need:
+
+Subscription name / ID
+NSG name
+Source IP
+Destination IP
+Destination port
+Protocol
+Allow/Deny action
+Flow/connection count if available
+
+The purpose is to identify the legitimate outbound connections that need to be whitelisted. Once those required destinations/ports are validated, we can create specific allow rules and then add a higher-priority Deny Any → Any outbound rule to prevent unrestricted outbound access.
