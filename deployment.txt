@@ -1,8 +1,1 @@
-index=firewall sourcetype="azure:vnet:flow"
-flowLogResourceID="*<SUBSCRIPTION-ID>*"
-rule=AllowInternetOutBound
-| mvexpand flowRecords
-| rex field=flowRecords "(?<time>[^,]+),(?<src_ip>[^,]+),(?<dest_ip>[^,]+),(?<src_port>[^,]+),(?<dest_port>[^,]+),(?<protocol>[^,]+),(?<direction>[^,]+),(?<decision>[^,]+).*"
-| where direction="O" AND decision="A"
-| stats count by src_ip dest_ip dest_port protocol
-| sort - count
+The available VNet flow logs do not show traffic associated with ADH_CORE_PE_dev-nsg, so we don’t currently have evidence supporting any new outbound whitelist rules for this NSG. Since this is DEV, the next step is to apply the outbound deny in a controlled change, validate the workload, and only add explicit allow rules if testing identifies a required dependency.
