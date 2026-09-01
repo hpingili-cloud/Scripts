@@ -1,16 +1,8 @@
-We are working on remediation for the NSG finding where outbound rules allow Any/Any traffic.
-
-Could you please provide the last 30 days of outbound NSG flow-log data for the ADH subscriptions/NSGs in scope?
-
-We specifically need:
-
-Subscription name / ID
-NSG name
-Source IP
-Destination IP
-Destination port
-Protocol
-Allow/Deny action
-Flow/connection count if available
-
-The purpose is to identify the legitimate outbound connections that need to be whitelisted. Once those required destinations/ports are validated, we can create specific allow rules and then add a higher-priority Deny Any → Any outbound rule to prevent unrestricted outbound access.
+index=firewall sourcetype="azure:vnet:flow"
+flowLogResourceID="*<SUBSCRIPTION-ID>*"
+rule=AllowInternetOutBound
+| mvexpand flowRecords
+| rex field=flowRecords "(?<time>[^,]+),(?<src_ip>[^,]+),(?<dest_ip>[^,]+),(?<src_port>[^,]+),(?<dest_port>[^,]+),(?<protocol>[^,]+),(?<direction>[^,]+),(?<decision>[^,]+).*"
+| where direction="O" AND decision="A"
+| stats count by src_ip dest_ip dest_port protocol
+| sort - count
